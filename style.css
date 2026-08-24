@@ -179,10 +179,18 @@ canvas.trace { display:block; border-radius:16px; touch-action:none;
 .mic-word { font-family:var(--en); font-weight:800; direction:ltr;
             font-size:clamp(30px,9vw,46px); }
 .mic-status { color:var(--muted); font-size:15px; text-align:center; min-height:22px; }
-.mic-btn { width:84px; height:84px; border-radius:50%; background:var(--pink); color:#fff;
-           font-size:40px; box-shadow:var(--shadow); }
-.mic-btn:active { transform:translateY(4px); box-shadow:none; }
-.mic-btn.listening { animation:pulse .9s ease-in-out infinite; background:var(--bad); }
+.mic-row { display:flex; gap:14px; }
+.mic-act {
+  width:104px; min-height:92px; border-radius:22px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+}
+.mic-act:active { transform:translateY(4px); box-shadow:none; }
+.mic-act:disabled { opacity:.45; }
+.mic-act-icon { font-size:36px; line-height:1; }
+.mic-act-label { font-size:14px; font-weight:700; }
+.mic-listen { background:var(--card); color:var(--ink); }
+.mic-rec { background:var(--pink); color:#fff; }
+.mic-rec.listening { animation:pulse .9s ease-in-out infinite; background:var(--bad); }
 
 /* ---------- wardrobe ---------- */
 
@@ -243,6 +251,8 @@ canvas.trace { display:block; border-radius:16px; touch-action:none;
 .primary:active { transform:translateY(3px); box-shadow:none; }
 .danger { background:#fbe6e6; color:#b03a37; border-radius:999px;
           padding:14px 22px; font-weight:700; }
+.warn { background:#fff2d9; color:#8a6100; border-radius:999px;
+        padding:14px 22px; font-weight:700; }
 
 /* ---------- parent panel ---------- */
 

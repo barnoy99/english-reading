@@ -52,6 +52,10 @@ const Engine = (function () {
          other one. */
       earned: 0,
       coins: 0,
+      /* Bumped by a deliberate coin reset. Merging normally takes the HIGHER
+         lifetime total, which would let an old device undo a reset — so a
+         higher epoch wins outright instead of the higher number. */
+      coinEpoch: 0,
       owned: STARTER.slice(),   // WARDROBE item ids she has bought
       equipped: {},             // slot -> item id she is wearing
       streak: 0,
@@ -533,6 +537,19 @@ const Engine = (function () {
 
   /* Tapping something she owns puts it on. Tapping the extra she is already
      wearing takes it off again; the four basics can only be swapped. */
+  /* Wipes the money and the wardrobe without touching a single thing she has
+     learned. The epoch bump is what makes it stick across her other devices. */
+  function resetCoins() {
+    s.coinEpoch = (s.coinEpoch || 0) + 1;
+    s.earned = 0;
+    s.owned = STARTER.slice();
+    s.equipped = {};
+    dressTheGaps();
+    recomputeCoins();
+    save();
+    return s.coinEpoch;
+  }
+
   function equip(id) {
     const w = item(id);
     if (!w || s.owned.indexOf(id) < 0) return false;
@@ -584,10 +601,26 @@ const Engine = (function () {
 
     const union = (a, b) => Array.from(new Set((a || []).concat(b || [])));
     s.letters = union(s.letters, r.letters).filter(id => L[id]);
-    s.owned = union(s.owned, r.owned).filter(id => item(id));
     s.stage = Math.max(s.stage || 1, r.stage || 1);
     s.mission = Math.max(s.mission || 0, r.mission || 0);
-    s.earned = Math.max(s.earned || 0, r.earned || 0);
+
+    /* Money: a newer reset epoch replaces the balance outright; otherwise the
+       usual rules apply, because normally neither device may lose a coin. */
+    const mine = s.coinEpoch || 0, theirs = r.coinEpoch || 0;
+    if (theirs > mine) {
+      s.coinEpoch = theirs;
+      s.earned = r.earned || 0;
+      s.owned = (r.owned || []).filter(id => item(id));
+      s.equipped = {};
+      if (r.equipped) Object.keys(r.equipped).forEach(slot => {
+        const w = item(r.equipped[slot]);
+        if (w && w.slot === slot && s.owned.indexOf(w.id) >= 0) s.equipped[slot] = w.id;
+      });
+    } else if (theirs === mine) {
+      s.owned = union(s.owned, r.owned).filter(id => item(id));
+      s.earned = Math.max(s.earned || 0, r.earned || 0);
+    }
+    STARTER.forEach(id => { if (s.owned.indexOf(id) < 0) s.owned.push(id); });
     if (!s.newest && r.newest) s.newest = r.newest;
 
     if (r.lastDay && (!s.lastDay || r.lastDay > s.lastDay)) {
@@ -603,7 +636,7 @@ const Engine = (function () {
     }
 
     // what she is wearing is a preference, so the newer device decides
-    if ((r.updatedAt || 0) > (s.updatedAt || 0) && r.equipped) {
+    if (theirs === mine && (r.updatedAt || 0) > (s.updatedAt || 0) && r.equipped) {
       Object.keys(r.equipped).forEach(slot => {
         const w = item(r.equipped[slot]);
         if (w && w.slot === slot && s.owned.indexOf(w.id) >= 0) s.equipped[slot] = w.id;
@@ -657,7 +690,7 @@ const Engine = (function () {
     makeQuestion, availableActivities,
     record, letterScore, letterSolid, openSolidFraction,
     tryUnlock, tryOpenStage,
-    outfit, catalog, buy, equip, missionReward,
+    outfit, catalog, buy, equip, missionReward, resetCoins,
     report, setLetter, set,
     mergeState,
     setOnSave(fn) { onSave = fn; },

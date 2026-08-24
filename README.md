@@ -61,6 +61,8 @@ Long-press the faint `·` in the top corner for 0.8s.
 - **שלב** — force stage 1 or 2
 - **אורך מסע** — 2 to 5 games per mission
 - **מיקרופון** — the speaking bonus round, on by default
+- **איפוס מטבעות** — wipes coins and wardrobe, keeps everything she has learned
+- **איפוס הכל** — wipes everything
 
 ## Under the hood
 
@@ -90,7 +92,11 @@ localStorage stays the source of truth; Firebase is only a courier. On launch, a
 
 The merge cannot lose work. Per-item progress goes to whichever device practised that item more; letters and furniture are unioned; stage, mission count and lifetime coins take the maximum; the streak follows the later day; settings follow the more recently touched device.
 
-**Coins are derived, not stored.** A running balance cannot merge — spend on the phone and the tablet still believes the coins are there. The state keeps lifetime `earned` coins, which only ever grows, and the spendable balance is always `earned − (what the room cost)`. That makes every synced field safe to merge, and old saves migrate on load.
+**Coins are derived, not stored.** A running balance cannot merge — spend on the phone and the tablet still believes the coins are there. The state keeps lifetime `earned` coins, which only ever grows, and the spendable balance is always `earned − (what the wardrobe cost)`. That makes every synced field safe to merge, and old saves migrate on load.
+
+**Resetting coins needs `coinEpoch`.** Because merging keeps the *higher* lifetime total, writing a lower number would simply be undone the next time an old device syncs. A reset bumps `coinEpoch`, and a higher epoch replaces the balance outright instead of taking the maximum — so the reset propagates instead of bouncing back.
+
+**A page served from localhost never syncs.** A dev build writing to the live record once handed her 500 coins, and the max-wins merge meant it could not be undone from a normal client. `sync.js` disables itself on localhost; the parent panel shows 🛠️ when that is why sync is off.
 
 One known rough edge: `due` dates are counted in missions, and two devices can have different mission counts. After a merge that only means a few items come back for review sooner than they strictly need to — never that progress is lost.
 

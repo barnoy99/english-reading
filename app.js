@@ -448,8 +448,11 @@
   function micBonus() {
     const s = Engine.state;
     const pool = WORDS.filter(w => w.emoji);
-    const word = pool[Math.floor(Math.random() * pool.length)];
     if (!s.mic || !SR || !pool.length) return finish(0);
+    const word = pool[Math.floor(Math.random() * pool.length)];
+
+    let listening = false;
+    let tries = 0;
 
     $('play-title').textContent = 'בונוס: תגידי את המילה!';
     $('play-foot').innerHTML = '';
@@ -459,54 +462,81 @@
     const card = el('div', 'mic-card');
     card.appendChild(el('div', 'prompt-emoji', word.emoji));
     card.appendChild(el('div', 'mic-word', word.en));
-    const status = el('div', 'mic-status', 'לחצי על המיקרופון ותגידי');
+    const status = el('div', 'mic-status', 'אפשר לשמוע כמה פעמים שרוצים 👂');
     card.appendChild(status);
 
-    const mic = el('button', 'mic-btn', '🎤');
-    card.appendChild(mic);
+    /* Hearing the word is unlimited and always available — she should never
+       have to guess at the pronunciation before recording herself. */
+    const row = el('div', 'mic-row');
+    const listen = el('button', 'mic-act mic-listen');
+    listen.appendChild(el('span', 'mic-act-icon', '👂'));
+    listen.appendChild(el('span', 'mic-act-label', 'שמעי'));
+    const rec = el('button', 'mic-act mic-rec');
+    rec.appendChild(el('span', 'mic-act-icon', '🎤'));
+    rec.appendChild(el('span', 'mic-act-label', 'הקליטי'));
+    row.appendChild(listen);
+    row.appendChild(rec);
+    card.appendChild(row);
     body.appendChild(card);
 
-    const skip = el('button', 'hint-btn', 'דלגי ➜');
-    skip.onclick = () => finish(0);
+    const say = () => { if (!listening) Voice.speak(word.en, { rate: 0.75 }); };
+    listen.onclick = () => { if (listening) return; Voice.sfx.pop(); say(); };
+    setTimeout(say, 400);
+
+    const skip = el('button', 'hint-btn', 'ממשיכים ➜');
+    skip.onclick = () => { Voice.stop(); finish(0); };
     $('play-foot').appendChild(skip);
 
-    setTimeout(() => Voice.speak(word.en), 300);
+    function settle(ok, heardText) {
+      listening = false;
+      rec.classList.remove('listening');
+      listen.disabled = false;
+      tries++;
+      if (ok) {
+        status.textContent = '🎉 מעולה!';
+        Voice.sfx.win();
+        sparkleAt(card, 16);
+        setTimeout(() => finish(1), 1500);
+        return;
+      }
+      Voice.sfx.pop();
+      if (ok === null) status.textContent = 'לא הצלחתי לשמוע 🤷 אפשר לנסות שוב';
+      else status.textContent = 'שמעתי "' + heardText + '" — שמעי שוב ונסי עוד פעם';
+      // she keeps her coins either way; after a few goes the app moves on
+      if (tries >= 3) {
+        status.textContent = 'יופי שניסית! 💪';
+        setTimeout(() => finish(0), 1600);
+      }
+    }
 
-    mic.onclick = () => {
-      let rec;
-      try { rec = new SR(); } catch (e) { return finish(0); }
-      rec.lang = 'en-US';
-      rec.interimResults = false;
-      rec.maxAlternatives = 5;
-      mic.classList.add('listening');
+    rec.onclick = () => {
+      if (listening) return;
+      Voice.stop();                       // never record over the synthesiser
+      let r;
+      try { r = new SR(); } catch (e) { return finish(0); }
+      r.lang = 'en-US';
+      r.interimResults = false;
+      r.maxAlternatives = 5;
+      listening = true;
+      listen.disabled = true;
+      rec.classList.add('listening');
       status.textContent = 'מקשיבה…';
 
-      rec.onresult = ev => {
+      r.onresult = ev => {
         const heard = [];
         for (let i = 0; i < ev.results[0].length; i++) {
           heard.push(ev.results[0][i].transcript.toLowerCase().trim());
         }
-        const ok = heard.some(h => closeEnough(h, word.en.toLowerCase()));
-        mic.classList.remove('listening');
-        if (ok) {
-          status.textContent = '🎉 מעולה! ' + heard[0];
-          Voice.sfx.win();
-          sparkleAt(card, 16);
-          setTimeout(() => finish(1), 1400);
-        } else {
-          // never a failure — she tried, the coin is hers either way
-          status.textContent = 'שמעתי "' + heard[0] + '" — ננסה שוב בפעם הבאה 🙂';
-          Voice.sfx.pop();
-          setTimeout(() => finish(0), 1600);
-        }
+        settle(heard.some(h => closeEnough(h, word.en.toLowerCase())), heard[0]);
       };
-      rec.onerror = () => {
-        mic.classList.remove('listening');
-        status.textContent = 'לא הצלחתי לשמוע 🤷';
-        setTimeout(() => finish(0), 1200);
+      r.onerror = () => settle(null, null);
+      r.onend = () => {
+        if (!listening) return;
+        listening = false;
+        rec.classList.remove('listening');
+        listen.disabled = false;
       };
-      rec.onend = () => mic.classList.remove('listening');
-      try { rec.start(); } catch (e) { finish(0); }
+      try { r.start(); } catch (e) { settle(null, null); }
     };
   }
 
@@ -624,7 +654,9 @@
       synced: '☁️ מסונכרן בין המכשירים',
       connecting: '☁️ מתחבר…',
       local: '📴 ללא חיבור — נשמר במכשיר הזה בלבד',
-      off: '📴 סנכרון כבוי — נשמר במכשיר הזה בלבד'
+      off: (typeof Sync !== 'undefined' && Sync.isDev)
+             ? '🛠️ גרסת פיתוח — לא מסונכרן'
+             : '📴 סנכרון כבוי — נשמר במכשיר הזה בלבד'
     };
     $('parent-sync').textContent =
       typeof Sync !== 'undefined' ? (syncText[Sync.status] || Sync.status) : syncText.off;
@@ -708,6 +740,12 @@
     gate.addEventListener('pointerup', endGate);
     gate.addEventListener('pointerleave', endGate);
 
+    $('parent-coins').onclick = () => {
+      if (!confirm('לאפס את המטבעות והבגדים של ' + CHILD.name + '?\n(ההתקדמות בלימוד נשמרת)')) return;
+      Engine.resetCoins();
+      renderHome();
+      openParent();
+    };
     $('parent-close').onclick = () => $('parent').classList.add('hidden');
     $('parent-reset').onclick = () => {
       if (!confirm('לאפס את כל ההתקדמות של ' + CHILD.name + '?')) return;

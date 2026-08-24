@@ -24,8 +24,15 @@ const Sync = (function () {
   let onChange = null;
   let status = 'off';     // off | connecting | synced | local
 
+  /* A page served from localhost is a development copy. It must never write to
+     the live record — a test run once handed her 500 coins, and because the
+     merge keeps the HIGHER lifetime total that could not be undone from a
+     normal client. Dev builds stay on localStorage; the parent panel says so. */
+  const IS_DEV = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+
   function configured() {
-    return typeof FIREBASE_CONFIG !== 'undefined'
+    return !IS_DEV
+        && typeof FIREBASE_CONFIG !== 'undefined'
         && FIREBASE_CONFIG.apiKey
         && FIREBASE_CONFIG.apiKey.indexOf('YOUR_') !== 0
         && typeof firebase !== 'undefined';
@@ -84,6 +91,7 @@ const Sync = (function () {
 
   return {
     init: init, pull: pull, push: push, configured: configured,
+    get isDev() { return IS_DEV; },
     get status() { return status; },
     get path() { return SYNC_PATH; }
   };
