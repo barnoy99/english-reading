@@ -4,7 +4,7 @@
 
 An English **reading** app for a Hebrew-speaking 8-year-old, built to be the thing she opens instead of YouTube.
 
-Works on any phone, tablet or computer. Open the link once and it installs to the home screen (Chrome: ⋮ → *Add to Home screen*; iPhone Safari: Share → *Add to Home Screen*), after which it opens full-screen and works with no connection at all. Progress is stored per device.
+Works on any phone, tablet or computer, and **progress follows her between them**. Open the link once and it installs to the home screen (Chrome: ⋮ → *Add to Home screen*; iPhone Safari: Share → *Add to Home Screen*), after which it opens full-screen and works with no connection at all.
 
 She already has [Word Missile](../../Jonathan/English%20Vocabulary%20Game/README.md) for Hebrew↔English vocabulary drill. This app does the thing that one doesn't: it teaches her to **read** — letters, sounds, and eventually words — and quietly keeps score so the practice lands where it's needed.
 
@@ -58,12 +58,23 @@ Long-press the faint `·` in the top corner for 0.8s.
 | `engine.js` | DOM-free. Mastery, spaced repetition, unlocking, question generation. `window.__engine` |
 | `audio.js` | English TTS + WebAudio sound effects. `Voice` |
 | `app.js` | Screens, the six activity renderers, trace canvas. `window.__app` |
+| `sync.js` | Cross-device progress sync. `window.__sync` |
 
 **Spaced repetition** is Leitner boxes 0–5, scheduled in missions rather than days — she might play twice in one evening or skip three days. A hit moves an item up a box and pushes it out 0/1/2/4/8/16 missions; a miss drops it two boxes and brings it back inside the same session.
 
 **Tracing** has no per-letter path data. The guide glyph is drawn onto the canvas, the same glyph is rendered offscreen as a mask, and her strokes are scored on two numbers: *precision* (how much of what she drew sits on the letter, with 26px of slack) and *recall* (how much of the letter she actually covered). Both are needed — precision alone passes a single dot, recall alone passes a scribble that fills the box. It's deliberately forgiving: a wobbly hand ±45px still passes, a wrong shape doesn't.
 
 **Pictures are emoji.** No image files, nothing to license, works offline.
+
+**Cross-device sync** shares the Le-Francais-au-Quotidien Firebase project, at `progress/abigailEnglish` — a sibling of that app's `progress/user1`. Its rules already open that subtree, so no console change was needed and neither app can reach the other's data. To move to a dedicated project later, swap `firebase-config.js` and `SYNC_PATH` in `sync.js`.
+
+localStorage stays the source of truth; Firebase is only a courier. On launch, and whenever she returns to the app, the remote copy is **merged** in — never assigned over the top — and written back. Writes are debounced, so a 15-answer mission costs one round trip. With no network, no config, or a blocked SDK, the app runs exactly as it did before and the parent panel says so.
+
+The merge cannot lose work. Per-item progress goes to whichever device practised that item more; letters and furniture are unioned; stage, mission count and lifetime coins take the maximum; the streak follows the later day; settings follow the more recently touched device.
+
+**Coins are derived, not stored.** A running balance cannot merge — spend on the phone and the tablet still believes the coins are there. The state keeps lifetime `earned` coins, which only ever grows, and the spendable balance is always `earned − (what the room cost)`. That makes every synced field safe to merge, and old saves migrate on load.
+
+One known rough edge: `due` dates are counted in missions, and two devices can have different mission counts. After a merge that only means a few items come back for review sooner than they strictly need to — never that progress is lost.
 
 **If the device has no English voice** installed, the three listening games drop out of the rotation automatically rather than asking silent questions, and a banner says so.
 
