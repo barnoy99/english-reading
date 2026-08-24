@@ -46,6 +46,11 @@ const Engine = (function () {
       seen: {},      // itemKey -> times asked
       due: {},       // itemKey -> mission number it becomes due again
       mission: 0,
+      /* `earned` is the lifetime coin count and only ever goes up; the
+         spendable balance is derived from it. That is what makes two devices
+         mergeable — a running balance would lose every purchase made on the
+         other one. */
+      earned: 0,
       coins: 0,
       owned: [],     // ROOM item ids
       shop: [],      // the three ids currently on offer
@@ -63,19 +68,38 @@ const Engine = (function () {
       s = raw ? JSON.parse(raw) : fresh();
     } catch (e) { s = fresh(); }
 
+    const hadEarned = s.earned !== undefined;
     const base = fresh();
     Object.keys(base).forEach(k => { if (s[k] === undefined) s[k] = base[k]; });
+    // a save from before coins were derived: reconstruct the lifetime total
+    if (!hadEarned) s.earned = (s.coins || 0) + spent();
 
     // guard against a save that references content no longer in data.js
     s.letters = (s.letters || []).filter(id => L[id]);
     if (!s.letters.length) s.letters = LETTER_ORDER.slice(0, OPENING_LETTERS);
     s.owned = (s.owned || []).filter(id => ROOM.some(r => r.id === id));
     s.shop = (s.shop || []).filter(id => ROOM.some(r => r.id === id));
+    recomputeCoins();
     if (!s.shop.length) rollShop();
     return s;
   }
 
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+  let onSave = null;
+
+  function save() {
+    s.updatedAt = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+    if (onSave) onSave();
+  }
+
+  const spent = () => (s.owned || []).reduce((a, id) => {
+    const item = ROOM.find(r => r.id === id);
+    return a + (item ? item.cost : 0);
+  }, 0);
+
+  /* Never stored as truth — always recomputed from earned minus what the room
+     cost, so it survives a merge from another device. */
+  function recomputeCoins() { s.coins = Math.max(0, (s.earned || 0) - spent()); }
   function reset() { s = fresh(); rollShop(); save(); return s; }
 
   /* ---------- scoring ---------- */
@@ -409,7 +433,8 @@ const Engine = (function () {
   function finishMission(bonus) {
     const acc = mission && mission.total ? mission.correct / mission.total : 0;
     s.mission++;
-    s.coins += 1 + (bonus || 0);
+    s.earned = (s.earned || 0) + 1 + (bonus || 0);
+    recomputeCoins();
 
     const today = todayKey();
     if (s.lastDay !== today) {
@@ -478,8 +503,8 @@ const Engine = (function () {
     if (s.owned.indexOf(id) >= 0) return { ok: false, why: 'owned' };
     if (slotFull(item.slot)) return { ok: false, why: 'full' };
     if (s.coins < item.cost) return { ok: false, why: 'coins' };
-    s.coins -= item.cost;
     s.owned.push(id);
+    recomputeCoins();
     s.shop = s.shop.filter(x => x !== id);
     while (s.shop.length < 3) {
       const extra = buyable().filter(r => s.shop.indexOf(r.id) < 0);
@@ -498,6 +523,58 @@ const Engine = (function () {
       if (item && out[item.slot]) out[item.slot].push(item);
     });
     return out;
+  }
+
+  /* ---------- merging another device ----------
+     Never "last write wins" — that would throw away whatever she did on the
+     other device. Every field has a rule that cannot lose work:
+       per-item progress : whichever device has practised that item more often
+       letters / owned    : union
+       stage / mission    : the further along
+       earned             : the higher lifetime total (it only ever grows)
+       streak             : whichever device has the later day
+       settings           : whichever device was touched more recently */
+  function mergeState(r) {
+    if (!r || typeof r !== 'object') return false;
+
+    const keys = new Set(Object.keys(s.seen || {}).concat(Object.keys(r.seen || {})));
+    keys.forEach(k => {
+      const mine = (s.seen || {})[k] || 0;
+      const theirs = (r.seen || {})[k] || 0;
+      if (theirs <= mine) return;
+      // take that item's whole record together, so the four fields stay coherent
+      s.seen[k] = theirs;
+      if (r.mastery && r.mastery[k] !== undefined) s.mastery[k] = r.mastery[k];
+      if (r.box && r.box[k] !== undefined) s.box[k] = r.box[k];
+      if (r.due && r.due[k] !== undefined) s.due[k] = r.due[k];
+    });
+
+    const union = (a, b) => Array.from(new Set((a || []).concat(b || [])));
+    s.letters = union(s.letters, r.letters).filter(id => L[id]);
+    s.owned = union(s.owned, r.owned).filter(id => ROOM.some(x => x.id === id));
+    s.stage = Math.max(s.stage || 1, r.stage || 1);
+    s.mission = Math.max(s.mission || 0, r.mission || 0);
+    s.earned = Math.max(s.earned || 0, r.earned || 0);
+    if (!s.newest && r.newest) s.newest = r.newest;
+
+    if (r.lastDay && (!s.lastDay || r.lastDay > s.lastDay)) {
+      s.lastDay = r.lastDay; s.streak = r.streak || 0;
+    } else if (r.lastDay && r.lastDay === s.lastDay) {
+      s.streak = Math.max(s.streak || 0, r.streak || 0);
+    }
+
+    // preferences are the parent's, so the most recently changed one wins
+    if ((r.updatedAt || 0) > (s.updatedAt || 0)) {
+      if (r.mic !== undefined) s.mic = r.mic;
+      if (r.goal !== undefined) s.goal = r.goal;
+    }
+
+    recomputeCoins();
+    // an offer she has since bought elsewhere must not stay on the shelf
+    s.shop = (s.shop || []).filter(id => s.owned.indexOf(id) < 0);
+    if (s.shop.length < 3) rollShop();
+    save();
+    return true;
   }
 
   /* ---------- parent panel ---------- */
@@ -544,6 +621,9 @@ const Engine = (function () {
     tryUnlock, tryOpenStage,
     roomLayout, rollShop, buy, buyable,
     report, setLetter, set,
+    mergeState,
+    setOnSave(fn) { onSave = fn; },
+    get inMission() { return mission !== null; },
     huntPool, huntTargets, soundOptions, nameOptions
   };
 })();

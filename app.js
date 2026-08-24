@@ -580,6 +580,15 @@
       ? '🔊 קול: ' + Voice.voiceName()
       : '🔇 אין קול אנגלי מותקן במכשיר';
 
+    const syncText = {
+      synced: '☁️ מסונכרן בין המכשירים',
+      connecting: '☁️ מתחבר…',
+      local: '📴 ללא חיבור — נשמר במכשיר הזה בלבד',
+      off: '📴 סנכרון כבוי — נשמר במכשיר הזה בלבד'
+    };
+    $('parent-sync').textContent =
+      typeof Sync !== 'undefined' ? (syncText[Sync.status] || Sync.status) : syncText.off;
+
     const stage = $('parent-stage'); stage.innerHTML = '';
     [1, 2].forEach(n => {
       const b = el('button', 'chip' + (s.stage === n ? ' on' : ''),
@@ -668,6 +677,12 @@
     };
 
     document.addEventListener('pointerdown', () => Voice.unlock(), { once: true });
+
+    /* Progress from her other devices arrives asynchronously — redraw when it
+       lands, unless she is already mid-mission. */
+    if (typeof Sync !== 'undefined') {
+      Sync.init(function () { if (!Engine.inMission) renderHome(); });
+    }
 
     // the voice list can arrive late; check again before nagging
     let tries = 0;

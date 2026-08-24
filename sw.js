@@ -1,6 +1,6 @@
 /* Service worker — lets the app open with no connection at all.
    Bump CACHE_VERSION on every deploy that changes a file. */
-var CACHE_VERSION = 'v1';
+var CACHE_VERSION = 'v3';
 var CACHE_NAME = 'abigail-english-' + CACHE_VERSION;
 
 var SHELL = [
@@ -10,13 +10,15 @@ var SHELL = [
   'data.js',
   'audio.js',
   'engine.js',
+  'sync.js',
+  'firebase-config.js',
   'app.js',
   'manifest.json',
   'icon-192.png',
   'icon-512.png'
 ];
 
-var RUNTIME_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
+var RUNTIME_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
@@ -56,18 +58,20 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  /* Same-origin code and assets: serve the cached copy instantly, then refresh
-     it in the background. She gets a fast start now and the new version next
-     time she opens the app. */
+  /* Same-origin code and assets: network first, cache as the fallback.
+     Serving the cache first would mean a deploy only reaches her on the SECOND
+     launch, and a page can end up running a stale script against fresh markup.
+     These files total well under 100 KB, so paying for a conditional request
+     while online is cheaper than shipping her yesterday's code. Offline, the
+     cache answers exactly as before. */
   if (url.origin === self.location.origin) {
     e.respondWith(
-      caches.match(req).then(function (hit) {
-        var refresh = fetch(req).then(function (res) {
-          var copy = res.clone();
-          caches.open(CACHE_NAME).then(function (c) { c.put(req, copy); });
-          return res;
-        }).catch(function () { return hit; });
-        return hit || refresh;
+      fetch(req).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function (c) { c.put(req, copy); });
+        return res;
+      }).catch(function () {
+        return caches.match(req);
       })
     );
     return;

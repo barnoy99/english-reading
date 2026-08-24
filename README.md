@@ -83,7 +83,7 @@ Progress lives in `localStorage` under `abigailEnglish_state`.
 
 `git push` to `origin/main` — GitHub Pages rebuilds in about a minute.
 
-**Bump `CACHE_VERSION` in `sw.js` on every deploy that changes a file**, otherwise devices that already installed the app keep serving the old cached copy.
+Same-origin files are served **network-first**, so a deploy reaches her on the next launch rather than the one after. The cache is only used when she is offline. Still bump `CACHE_VERSION` in `sw.js` when you change the file list, so old caches get cleared out.
 
 ## Not built yet
 

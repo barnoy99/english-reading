@@ -95,6 +95,7 @@
   <div class="card parent-card">
     <h2>מסך הורים</h2>
     <div id="parent-voice" class="parent-voice"></div>
+    <div id="parent-sync" class="parent-voice"></div>
 
     <h3>שלב</h3>
     <div id="parent-stage" class="row-controls"></div>
@@ -121,6 +122,11 @@
 <script src="data.js"></script>
 <script src="audio.js"></script>
 <script src="engine.js"></script>
+<!-- optional: cross-device sync. If these fail to load the app runs locally. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="sync.js"></script>
 <script src="app.js"></script>
 <script>
   // offline support; harmless if the browser has no service workers
