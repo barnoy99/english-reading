@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2a9d8f">
+<title>אביגיל לומדת אנגלית</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="אנגלית">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+
+<div id="sparkles" aria-hidden="true"></div>
+
+<!-- ============ בית ============ -->
+<section id="screen-home" class="screen active">
+  <header class="topbar">
+    <button id="parent-gate" class="parent-gate" aria-label="הורים">·</button>
+    <div class="stats">
+      <span class="stat" id="stat-coins">🪙 0</span>
+      <span class="stat" id="stat-streak">🔥 0</span>
+    </div>
+  </header>
+
+  <div class="hello"><span class="mascot">🌟</span><span id="hello-text">שלום אביגיל!</span></div>
+
+  <div id="room" class="room">
+    <div class="room-wall"><div class="slot-row" id="slot-wall"></div></div>
+    <div class="room-shelf"><div class="slot-row" id="slot-shelf"></div></div>
+    <div class="room-floor">
+      <div class="slot-row" id="slot-floor"></div>
+      <div class="slot-row pets" id="slot-pet"></div>
+    </div>
+    <p id="room-empty" class="room-empty">החדר שלך ריק 😴<br>סיימי מסע וקבלי מטבע!</p>
+  </div>
+
+  <nav class="home-actions">
+    <button id="btn-start" class="big-cta">
+      <span class="cta-icon">🚀</span>
+      <span class="cta-text">מסע חדש</span>
+      <span class="cta-sub" id="cta-sub">3 משחקים</span>
+    </button>
+    <button id="btn-shop" class="side-cta">
+      <span class="cta-icon">🛍️</span><span class="cta-text">חנות</span>
+    </button>
+  </nav>
+
+  <p id="no-voice" class="no-voice hidden">
+    🔇 אין קול באנגלית במכשיר הזה — משחקי ההקשבה כבויים, אפשר לשחק בכתיבה ובהתאמה
+  </p>
+</section>
+
+<!-- ============ מסע ============ -->
+<section id="screen-play" class="screen">
+  <header class="topbar">
+    <button class="back" data-back aria-label="חזרה">↩</button>
+    <div id="progress" class="progress"></div>
+  </header>
+  <h2 id="play-title" class="play-title"></h2>
+  <div id="play-body" class="play-body"></div>
+  <div id="play-foot" class="play-foot"></div>
+</section>
+
+<!-- ============ חנות ============ -->
+<section id="screen-shop" class="screen">
+  <header class="topbar">
+    <button class="back" data-back aria-label="חזרה">↩</button>
+    <div class="stats"><span class="stat" id="shop-coins">🪙 0</span></div>
+  </header>
+  <h2 class="play-title">מה נקנה לחדר?</h2>
+  <div id="shop-body" class="shop-body"></div>
+  <p class="shop-note">כל מסע = מטבע אחד 🪙</p>
+</section>
+
+<!-- ============ חגיגה ============ -->
+<div id="celebrate" class="overlay hidden">
+  <div class="card celebrate-card">
+    <div id="celebrate-icon" class="gift">🎉</div>
+    <div id="celebrate-text" class="celebrate-text">כל הכבוד!</div>
+    <div id="celebrate-note" class="unlock-note hidden"></div>
+    <button id="celebrate-ok" class="primary">➜</button>
+  </div>
+</div>
+
+<!-- ============ הורים ============ -->
+<div id="parent" class="overlay hidden">
+  <div class="card parent-card">
+    <h2>מסך הורים</h2>
+    <div id="parent-voice" class="parent-voice"></div>
+
+    <h3>שלב</h3>
+    <div id="parent-stage" class="row-controls"></div>
+
+    <h3>אורך מסע</h3>
+    <div id="parent-goal" class="row-controls"></div>
+
+    <h3>מיקרופון</h3>
+    <div id="parent-mic" class="row-controls"></div>
+
+    <h3>אותיות פתוחות <small>(סמני מה שהיא כבר יודעת)</small></h3>
+    <div id="parent-letters" class="toggle-grid"></div>
+
+    <h3>שליטה</h3>
+    <div id="parent-mastery" class="mastery-list"></div>
+
+    <div class="parent-actions">
+      <button id="parent-close" class="primary">סגירה</button>
+      <button id="parent-reset" class="danger">איפוס הכל</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="audio.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+<script>
+  // offline support; harmless if the browser has no service workers
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>
