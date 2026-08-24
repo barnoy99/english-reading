@@ -12,7 +12,19 @@ Plain HTML/CSS/JS, no build step, works offline. Open `index.html` from any stat
 
 ## How it works for her
 
-One tap on **מסע חדש** starts a mission: 3 short games, ~15 questions, about 8 minutes, with a visible finish line. Finishing pays **one coin**, and coins buy furniture for a room she decorates. A streak counter tracks days in a row.
+One tap on **מסע חדש** starts a mission: 3 short games, ~15 questions, about 8 minutes, with a visible finish line. Coins earned go on a character she dresses — clothes, shoes, hats, bags, hairstyles, makeup and jewellery. A streak counter tracks days in a row.
+
+**Coins have to be earned.** Turning up is not enough:
+
+| Mission | Pays |
+|---|---|
+| under 55% correct | nothing |
+| 55–84% | 🪙 1 |
+| 85% or better | 🪙 2 |
+| microphone bonus | +🪙 1 |
+| every 5th day in a row | +🪙 2 |
+
+Garments run from 5 to 26 coins — a hair ribbon is a couple of good missions, a ball gown is a fortnight of them. Owning something never expires, so she can mix and match outfits freely; tapping a hat, bag, makeup or jewel she is already wearing takes it off again.
 
 There are no lives and no way to lose. A wrong answer shows the right one, says it aloud, and puts that item back in the review queue.
 
@@ -54,10 +66,10 @@ Long-press the faint `·` in the top corner for 0.8s.
 
 | File | Role |
 |---|---|
-| `data.js` | All content: letters, words, room furniture. Edit this, not the code. |
+| `data.js` | All content: letters, words, the wardrobe. Edit this, not the code. |
 | `engine.js` | DOM-free. Mastery, spaced repetition, unlocking, question generation. `window.__engine` |
 | `audio.js` | English TTS + WebAudio sound effects. `Voice` |
-| `app.js` | Screens, the six activity renderers, trace canvas. `window.__app` |
+| `app.js` | Screens, the six activity renderers, trace canvas, the figure. `window.__app` |
 | `sync.js` | Cross-device progress sync. `window.__sync` |
 
 **Spaced repetition** is Leitner boxes 0–5, scheduled in missions rather than days — she might play twice in one evening or skip three days. A hit moves an item up a box and pushes it out 0/1/2/4/8/16 missions; a miss drops it two boxes and brings it back inside the same session.
@@ -65,6 +77,12 @@ Long-press the faint `·` in the top corner for 0.8s.
 **Tracing** has no per-letter path data. The guide glyph is drawn onto the canvas, the same glyph is rendered offscreen as a mask, and her strokes are scored on two numbers: *precision* (how much of what she drew sits on the letter, with 26px of slack) and *recall* (how much of the letter she actually covered). Both are needed — precision alone passes a single dot, recall alone passes a scribble that fills the box. It's deliberately forgiving: a wobbly hand ±45px still passes, a wrong shape doesn't.
 
 **Pictures are emoji.** No image files, nothing to license, works offline.
+
+**The figure is inline SVG** on a 200x400 stage, drawn in fashion-illustration proportions (about six and a half heads tall). Garments are cut to fixed body landmarks documented at the top of the wardrobe section in `data.js` — keep to those and a new garment fits first time. Each item declares a `z` paint order; anything below 10 is painted behind the body (the backpack, the fairy wings), and a dress hides the top and bottom rather than unequipping them, so taking it off restores the outfit underneath.
+
+**Letter names are spoken from the glyph** ("A"), not a respelling. A respelling of "ay" was read as /iː/ on a real device, turning A into E. Add `nameSay:'...'` to any letter in `data.js` if it still comes out wrong on your device.
+
+**The app waits for speech to finish** before moving to the next question. Advancing on a fixed timer cut "buh… ball" off halfway and the next question then talked over what was left. There is a 4-second backstop in case a speech engine never reports the end.
 
 **Cross-device sync** shares the Le-Francais-au-Quotidien Firebase project, at `progress/abigailEnglish` — a sibling of that app's `progress/user1`. Its rules already open that subtree, so no console change was needed and neither app can reach the other's data. To move to a dedicated project later, swap `firebase-config.js` and `SYNC_PATH` in `sync.js`.
 

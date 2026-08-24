@@ -81,15 +81,24 @@ const Voice = (function () {
     speechSynthesis.speak(u);
   }
 
-  /* A letter's sound, then the word it lives in: "buh ... ball". */
-  function sound(letter, withKeyword) {
-    if (!withKeyword) return speak(letter.say, { rate: 0.6 });
-    speak(letter.say, { rate: 0.6, onend: () => {
-      setTimeout(() => speak(letter.kw, { rate: 0.75 }), 180);
+  /* A letter's sound, then the word it lives in: "buh ... ball".
+     `onend` fires only after the LAST word has finished, so callers can wait
+     for the whole phrase instead of guessing at a duration. */
+  function sound(letter, withKeyword, onend) {
+    if (!withKeyword) return speak(letter.say, { rate: 0.6, onend: onend });
+    speak(letter.say, { rate: 0.6, onend: function () {
+      setTimeout(function () { speak(letter.kw, { rate: 0.75, onend: onend }); }, 220);
     }});
   }
 
-  function name(letter) { speak(letter.nameSay, { rate: 0.7 }); }
+  /* The letter's NAME. Speech engines mangle bare respellings inconsistently —
+     one read "ay" as /iː/, turning A into E — so the glyph itself is spoken by
+     default, which every engine handles as a letter name. `nameSay` in data.js
+     overrides it for any letter that still comes out wrong on a given device. */
+  function name(letter, onend) {
+    const text = letter.nameSay || letter.up;
+    speak(text, { rate: 0.7, onend: onend });
+  }
 
   /* ---------- sound effects ---------- */
 

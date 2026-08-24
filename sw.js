@@ -1,6 +1,6 @@
 /* Service worker — lets the app open with no connection at all.
    Bump CACHE_VERSION on every deploy that changes a file. */
-var CACHE_VERSION = 'v3';
+var CACHE_VERSION = 'v4';
 var CACHE_NAME = 'abigail-english-' + CACHE_VERSION;
 
 var SHELL = [

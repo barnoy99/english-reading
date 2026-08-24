@@ -52,8 +52,8 @@ const Engine = (function () {
          other one. */
       earned: 0,
       coins: 0,
-      owned: [],     // ROOM item ids
-      shop: [],      // the three ids currently on offer
+      owned: STARTER.slice(),   // WARDROBE item ids she has bought
+      equipped: {},             // slot -> item id she is wearing
       streak: 0,
       lastDay: null,
       newest: null,
@@ -77,10 +77,16 @@ const Engine = (function () {
     // guard against a save that references content no longer in data.js
     s.letters = (s.letters || []).filter(id => L[id]);
     if (!s.letters.length) s.letters = LETTER_ORDER.slice(0, OPENING_LETTERS);
-    s.owned = (s.owned || []).filter(id => ROOM.some(r => r.id === id));
-    s.shop = (s.shop || []).filter(id => ROOM.some(r => r.id === id));
+    // drops anything no longer in data.js — including the old room furniture
+    s.owned = (s.owned || []).filter(id => item(id));
+    STARTER.forEach(id => { if (s.owned.indexOf(id) < 0) s.owned.push(id); });
+    s.equipped = s.equipped || {};
+    Object.keys(s.equipped).forEach(slot => {
+      const w = item(s.equipped[slot]);
+      if (!w || w.slot !== slot || s.owned.indexOf(w.id) < 0) delete s.equipped[slot];
+    });
+    dressTheGaps();
     recomputeCoins();
-    if (!s.shop.length) rollShop();
     return s;
   }
 
@@ -92,15 +98,17 @@ const Engine = (function () {
     if (onSave) onSave();
   }
 
+  const item = id => WARDROBE.find(w => w.id === id);
+
   const spent = () => (s.owned || []).reduce((a, id) => {
-    const item = ROOM.find(r => r.id === id);
-    return a + (item ? item.cost : 0);
+    const w = item(id);
+    return a + (w ? w.cost : 0);
   }, 0);
 
-  /* Never stored as truth — always recomputed from earned minus what the room
-     cost, so it survives a merge from another device. */
+  /* Never stored as truth — always recomputed from earned minus what the
+     wardrobe cost, so it survives a merge from another device. */
   function recomputeCoins() { s.coins = Math.max(0, (s.earned || 0) - spent()); }
-  function reset() { s = fresh(); rollShop(); save(); return s; }
+  function reset() { s = fresh(); dressTheGaps(); recomputeCoins(); save(); return s; }
 
   /* ---------- scoring ---------- */
 
@@ -430,25 +438,40 @@ const Engine = (function () {
 
   function todayKey(d) { return (d || new Date()).toISOString().slice(0, 10); }
 
+  /* Coins are meant to be worked for. Turning up is not enough — a mission
+     scraped through at 40% pays nothing, a solid one pays 1, and a really good
+     one pays 2. The microphone round and every fifth day in a row add more. */
+  function missionReward(acc, bonus, newDay) {
+    let coins = 0;
+    if (acc >= 0.55) coins += 1;
+    if (acc >= 0.85) coins += 1;
+    coins += (bonus || 0);
+    if (newDay && s.streak > 0 && s.streak % 5 === 0) coins += 2;
+    return coins;
+  }
+
   function finishMission(bonus) {
     const acc = mission && mission.total ? mission.correct / mission.total : 0;
     s.mission++;
-    s.earned = (s.earned || 0) + 1 + (bonus || 0);
-    recomputeCoins();
 
     const today = todayKey();
+    let newDay = false;
     if (s.lastDay !== today) {
       const y = new Date(); y.setDate(y.getDate() - 1);
       s.streak = (s.lastDay === todayKey(y)) ? s.streak + 1 : 1;
       s.lastDay = today;
+      newDay = true;
     }
+
+    const gained = missionReward(acc, bonus, newDay);
+    s.earned = (s.earned || 0) + gained;
+    recomputeCoins();
 
     const unlocked = tryUnlock();
     const stageUp = tryOpenStage();
-    rollShop();
     save();
     mission = null;
-    return { coins: s.coins, streak: s.streak, accuracy: acc, unlocked, stageUp };
+    return { gained, coins: s.coins, streak: s.streak, accuracy: acc, unlocked, stageUp };
   }
 
   /* ---------- progression ---------- */
@@ -473,56 +496,66 @@ const Engine = (function () {
     return 2;
   }
 
-  /* ---------- the room ---------- */
+  /* ---------- the wardrobe ---------- */
 
-  function slotFull(slot) {
-    const used = s.owned.filter(id => (ROOM.find(r => r.id === id) || {}).slot === slot).length;
-    return used >= (ROOM_SLOTS[slot] || 0);
+  /* Hair, top, bottom and shoes always have something on; the rest are
+     optional extras she can take off again. */
+  const ALWAYS_ON = ['hair', 'top', 'bottom', 'shoes'];
+
+  function dressTheGaps() {
+    ALWAYS_ON.forEach(slot => {
+      if (s.equipped[slot] && item(s.equipped[slot])) return;
+      const owned = s.owned.map(item).filter(w => w && w.slot === slot);
+      if (owned.length) s.equipped[slot] = owned[0].id;
+    });
   }
 
-  function buyable() {
-    return ROOM.filter(r => s.owned.indexOf(r.id) < 0 && !slotFull(r.slot));
-  }
-
-  function rollShop() {
-    const pool = buyable();
-    const scored = pool.map(r => {
-      let w = 1;
-      if (r.cost <= s.coins) w += 3;               // something she can afford today
-      else if (r.cost <= s.coins + 2) w += 1.5;    // something to save up for
-      return { r, w: w * (0.5 + Math.random()) };
-    }).sort((a, b) => b.w - a.w);
-    s.shop = scored.slice(0, 3).map(x => x.r.id);
-    save();
-    return s.shop;
+  function catalog(slot) {
+    return WARDROBE.filter(w => w.slot === slot).map(w => ({
+      item: w,
+      owned: s.owned.indexOf(w.id) >= 0,
+      worn: s.equipped[w.slot] === w.id,
+      affordable: s.coins >= w.cost
+    }));
   }
 
   function buy(id) {
-    const item = ROOM.find(r => r.id === id);
-    if (!item) return { ok: false, why: 'missing' };
+    const w = item(id);
+    if (!w) return { ok: false, why: 'missing' };
     if (s.owned.indexOf(id) >= 0) return { ok: false, why: 'owned' };
-    if (slotFull(item.slot)) return { ok: false, why: 'full' };
-    if (s.coins < item.cost) return { ok: false, why: 'coins' };
+    if (s.coins < w.cost) return { ok: false, why: 'coins' };
     s.owned.push(id);
     recomputeCoins();
-    s.shop = s.shop.filter(x => x !== id);
-    while (s.shop.length < 3) {
-      const extra = buyable().filter(r => s.shop.indexOf(r.id) < 0);
-      if (!extra.length) break;
-      s.shop.push(extra[Math.floor(Math.random() * extra.length)].id);
-    }
+    equip(id);                 // wear it straight away — that is the reward
     save();
-    return { ok: true, item: item };
+    return { ok: true, item: w };
   }
 
-  function roomLayout() {
-    const out = {};
-    Object.keys(ROOM_SLOTS).forEach(k => out[k] = []);
-    s.owned.forEach(id => {
-      const item = ROOM.find(r => r.id === id);
-      if (item && out[item.slot]) out[item.slot].push(item);
-    });
-    return out;
+  /* Tapping something she owns puts it on. Tapping the extra she is already
+     wearing takes it off again; the four basics can only be swapped. */
+  function equip(id) {
+    const w = item(id);
+    if (!w || s.owned.indexOf(id) < 0) return false;
+    const optional = ALWAYS_ON.indexOf(w.slot) < 0;
+    if (optional && s.equipped[w.slot] === id) delete s.equipped[w.slot];
+    else s.equipped[w.slot] = id;
+    // a dress and a separates outfit are two different looks, not one
+    if ((w.slot === 'top' || w.slot === 'bottom') && s.equipped.dress) delete s.equipped.dress;
+    save();
+    return true;
+  }
+
+  /* What to paint, in paint order. A dress hides the top and bottom rather
+     than unequipping them, so taking it off restores the outfit underneath. */
+  function outfit() {
+    const worn = Object.keys(s.equipped).map(slot => item(s.equipped[slot])).filter(Boolean);
+    const inADress = worn.some(w => w.slot === 'dress');
+    const visible = worn.filter(w => !(inADress && (w.slot === 'top' || w.slot === 'bottom')));
+    return {
+      back: visible.filter(w => w.back).map(w => w.back).join(''),
+      behind: visible.filter(w => w.z < 10).sort((a, b) => a.z - b.z),
+      front: visible.filter(w => w.z >= 10).sort((a, b) => a.z - b.z)
+    };
   }
 
   /* ---------- merging another device ----------
@@ -551,7 +584,7 @@ const Engine = (function () {
 
     const union = (a, b) => Array.from(new Set((a || []).concat(b || [])));
     s.letters = union(s.letters, r.letters).filter(id => L[id]);
-    s.owned = union(s.owned, r.owned).filter(id => ROOM.some(x => x.id === id));
+    s.owned = union(s.owned, r.owned).filter(id => item(id));
     s.stage = Math.max(s.stage || 1, r.stage || 1);
     s.mission = Math.max(s.mission || 0, r.mission || 0);
     s.earned = Math.max(s.earned || 0, r.earned || 0);
@@ -569,10 +602,15 @@ const Engine = (function () {
       if (r.goal !== undefined) s.goal = r.goal;
     }
 
+    // what she is wearing is a preference, so the newer device decides
+    if ((r.updatedAt || 0) > (s.updatedAt || 0) && r.equipped) {
+      Object.keys(r.equipped).forEach(slot => {
+        const w = item(r.equipped[slot]);
+        if (w && w.slot === slot && s.owned.indexOf(w.id) >= 0) s.equipped[slot] = w.id;
+      });
+    }
+    dressTheGaps();
     recomputeCoins();
-    // an offer she has since bought elsewhere must not stay on the shelf
-    s.shop = (s.shop || []).filter(id => s.owned.indexOf(id) < 0);
-    if (s.shop.length < 3) rollShop();
     save();
     return true;
   }
@@ -619,7 +657,7 @@ const Engine = (function () {
     makeQuestion, availableActivities,
     record, letterScore, letterSolid, openSolidFraction,
     tryUnlock, tryOpenStage,
-    roomLayout, rollShop, buy, buyable,
+    outfit, catalog, buy, equip, missionReward,
     report, setLetter, set,
     mergeState,
     setOnSave(fn) { onSave = fn; },

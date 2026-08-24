@@ -58,24 +58,28 @@
     $('stat-streak').textContent = '🔥 ' + s.streak;
     $('hello-text').textContent = 'שלום ' + CHILD.name + '!';
     $('cta-sub').textContent = s.goal + ' משחקים';
-    renderRoom();
+    renderDoll();
   }
 
-  function renderRoom() {
-    const layout = Engine.roomLayout();
-    let any = false;
-    Object.keys(layout).forEach(slot => {
-      const row = $('slot-' + slot);
-      if (!row) return;
-      row.innerHTML = '';
-      layout[slot].forEach(item => {
-        any = true;
-        const n = el('span', 'room-item', item.emoji);
-        n.title = item.he;
-        row.appendChild(n);
-      });
-    });
-    $('room-empty').classList.toggle('hidden', any);
+  /* The figure is painted back-to-front from what she is wearing: hair behind
+     the head, then anything worn behind the body (a backpack), the body, the
+     face, and finally every garment in `z` order. */
+  function dollSVG() {
+    const o = Engine.outfit();
+    const parts = [o.back];
+    o.behind.forEach(w => parts.push(w.svg));
+    parts.push(FIGURE.body, FIGURE.face);
+    o.front.forEach(w => parts.push(w.svg));
+    return '<svg viewBox="0 0 200 400" class="doll-svg" aria-hidden="true">' +
+           parts.join('') + '</svg>';
+  }
+
+  function renderDoll() {
+    const svg = dollSVG();
+    const home = $('doll');
+    if (home) home.innerHTML = svg;
+    const wardrobe = $('wardrobe-doll');
+    if (wardrobe) wardrobe.innerHTML = svg;
   }
 
   /* ---------- mission ---------- */
@@ -114,6 +118,15 @@
      module-level `q` — a timer that fires after she has moved on (or tapped
      back) must do nothing rather than speak the wrong thing. */
   const live = cq => q === cq;
+
+  /* Advance when the speech actually finishes, with a hard backstop in case a
+     speech engine never fires `onend`. Whichever comes first wins, once. */
+  function once(fn, maxWait) {
+    let fired = false;
+    const go = function () { if (fired) return; fired = true; fn(); };
+    setTimeout(go, maxWait);
+    return go;
+  }
 
   function earButton(onPlay, cq, label) {
     const b = el('button', 'ear', label || '👂');
@@ -192,23 +205,29 @@
     answered++;
     renderProgress();
 
+    /* Wait for the word to finish before moving on. Advancing on a fixed timer
+       cut "buh… ball" off halfway, and the next question's audio then talked
+       over what was left. */
     if (ok) {
       Voice.sfx.good();
       sparkleAt(btn, 8);
-      sayAnswer(cq);
-      setTimeout(() => { if (live(cq)) nextQuestion(); }, 1100);
+      const go = once(() => { if (live(cq)) nextQuestion(); }, 4000);
+      sayAnswer(cq, () => setTimeout(go, 550));
     } else {
       Voice.sfx.oops();
-      // show the right answer and say it, so the miss still teaches
-      setTimeout(() => { if (live(cq)) sayAnswer(cq); }, 350);
-      setTimeout(() => { if (live(cq)) nextQuestion(); }, 2000);
+      // show the right answer and say it in full, so the miss still teaches
+      const go = once(() => { if (live(cq)) nextQuestion(); }, 5000);
+      setTimeout(() => {
+        if (live(cq)) sayAnswer(cq, () => setTimeout(go, 900)); else go();
+      }, 350);
     }
   }
 
-  function sayAnswer(cq) {
-    if (cq.type === 'letterSound' || cq.type === 'soundHunt') Voice.sound(cq.letter, true);
-    else if (cq.type === 'letterName' || cq.type === 'letterCase') Voice.name(cq.letter);
-    else if (cq.word) Voice.speak(cq.word.en);
+  function sayAnswer(cq, onend) {
+    if (cq.type === 'letterSound' || cq.type === 'soundHunt') Voice.sound(cq.letter, true, onend);
+    else if (cq.type === 'letterName' || cq.type === 'letterCase') Voice.name(cq.letter, onend);
+    else if (cq.word) Voice.speak(cq.word.en, { onend: onend });
+    else if (onend) onend();
   }
 
   /* ---------- trace ----------
@@ -323,8 +342,8 @@
       if (ok) {
         Voice.sfx.good();
         sparkleAt(cv, 12);
-        Voice.name(cq.letter);
-        setTimeout(() => { if (live(cq)) nextQuestion(); }, 1200);
+        const go = once(() => { if (live(cq)) nextQuestion(); }, 4000);
+        Voice.name(cq.letter, () => setTimeout(go, 550));
       } else {
         Voice.sfx.oops();
         // show what it should look like, then move on — no second chance needed,
@@ -335,8 +354,8 @@
         ctx.fillStyle = 'rgba(42,157,143,.55)';
         ctx.fillText(ch, TRACE.size / 2, TRACE.size / 2);
         ctx.restore();
-        Voice.name(cq.letter);
-        setTimeout(() => { if (live(cq)) nextQuestion(); }, 1800);
+        const go = once(() => { if (live(cq)) nextQuestion(); }, 5000);
+        Voice.name(cq.letter, () => setTimeout(go, 900));
       }
       window.__lastTrace = r;
     }
@@ -521,16 +540,18 @@
     renderHome();
     Voice.sfx.coin();
 
-    $('celebrate-icon').textContent = r.accuracy >= 0.8 ? '🏆' : '🎉';
-    $('celebrate-text').textContent = 'סיימת! קיבלת ' + (1 + (bonus || 0)) + ' 🪙';
+    $('celebrate-icon').textContent = r.gained >= 2 ? '🏆' : r.gained ? '🎉' : '💪';
+    $('celebrate-text').textContent = r.gained
+      ? 'סיימת! קיבלת ' + r.gained + ' 🪙'
+      : 'סיימת! הפעם בלי מטבע — נסי לדייק יותר';
 
     const note = $('celebrate-note');
-    const bits = [];
+    const bits = ['דייקת ב־' + Math.round(r.accuracy * 100) + '%'];
     if (r.streak > 1) bits.push('🔥 ' + r.streak + ' ימים ברצף!');
     if (r.unlocked) bits.push('אות חדשה נפתחה: ' + r.unlocked.up + r.unlocked.low + ' (' + r.unlocked.name + ')');
     if (r.stageUp) bits.push('🎊 נפתח שלב חדש: מילים ראשונות!');
     note.innerHTML = bits.join('<br>');
-    note.classList.toggle('hidden', !bits.length);
+    note.classList.remove('hidden');
 
     $('celebrate').classList.remove('hidden');
     if (r.unlocked || r.stageUp) Voice.sfx.win();
@@ -538,33 +559,52 @@
 
   /* ---------- shop ---------- */
 
+  let openSlot = 'hair';
+
   function renderShop() {
     const s = Engine.state;
     $('shop-coins').textContent = '🪙 ' + s.coins;
+    renderDoll();
+
+    const tabs = $('wardrobe-tabs');
+    tabs.innerHTML = '';
+    WARDROBE_SLOTS.forEach(slot => {
+      const b = el('button', 'tab' + (slot.id === openSlot ? ' on' : ''));
+      b.appendChild(el('span', 'tab-icon', slot.icon));
+      b.appendChild(el('span', 'tab-label', slot.he));
+      b.onclick = () => { openSlot = slot.id; Voice.sfx.pop(); renderShop(); };
+      tabs.appendChild(b);
+    });
+
     const body = $('shop-body');
     body.innerHTML = '';
+    Engine.catalog(openSlot).forEach(entry => {
+      const w = entry.item;
+      const card = el('button', 'wear-card');
+      if (entry.worn) card.classList.add('worn');
+      if (!entry.owned) card.classList.add('locked');
+      if (!entry.owned && !entry.affordable) card.classList.add('poor');
 
-    const offers = s.shop.map(id => ROOM.find(r => r.id === id)).filter(Boolean);
-    if (!offers.length) {
-      body.appendChild(el('p', 'room-empty', 'הכול נקנה! החדר מלא 🎉'));
-      return;
-    }
-    offers.forEach(item => {
-      const card = el('button', 'shop-card');
-      card.appendChild(el('span', 'shop-emoji', item.emoji));
-      card.appendChild(el('span', 'shop-name', item.he));
-      card.appendChild(el('span', 'shop-cost', '🪙 ' + item.cost));
-      const afford = s.coins >= item.cost;
-      card.classList.toggle('poor', !afford);
+      card.appendChild(el('span', 'wear-icon', w.icon));
+      card.appendChild(el('span', 'wear-name', w.he));
+      card.appendChild(el('span', 'wear-tag',
+        entry.worn ? '✓ לובשת' : entry.owned ? 'ללבוש' : '🪙 ' + w.cost));
+
       card.onclick = () => {
-        const res = Engine.buy(item.id);
-        if (!res.ok) {
-          if (res.why === 'coins') { Voice.sfx.oops(); card.classList.add('shake');
-            setTimeout(() => card.classList.remove('shake'), 500); }
-          return;
+        if (entry.owned) {
+          Engine.equip(w.id);
+          Voice.sfx.pop();
+        } else {
+          const res = Engine.buy(w.id);
+          if (!res.ok) {
+            Voice.sfx.oops();
+            card.classList.add('shake');
+            setTimeout(() => card.classList.remove('shake'), 500);
+            return;
+          }
+          Voice.sfx.coin();
+          sparkleAt(card, 14);
         }
-        Voice.sfx.coin();
-        sparkleAt(card, 14);
         renderShop();
         renderHome();
       };
