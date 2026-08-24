@@ -1,6 +1,10 @@
 # אביגיל לומדת אנגלית 🌟
 
+**▶ https://barnoy99.github.io/english-reading/**
+
 An English **reading** app for a Hebrew-speaking 8-year-old, built to be the thing she opens instead of YouTube.
+
+Works on any phone, tablet or computer. Open the link once and it installs to the home screen (Chrome: ⋮ → *Add to Home screen*; iPhone Safari: Share → *Add to Home Screen*), after which it opens full-screen and works with no connection at all. Progress is stored per device.
 
 She already has [Word Missile](../../Jonathan/English%20Vocabulary%20Game/README.md) for Hebrew↔English vocabulary drill. This app does the thing that one doesn't: it teaches her to **read** — letters, sounds, and eventually words — and quietly keeps score so the practice lands where it's needed.
 
@@ -71,12 +75,19 @@ python -m http.server 8033 --directory "C:\Users\User\Documents\Claude Code\Clau
 
 A preview config named `abigail-english` (port 8033) is registered in `.claude/launch.json`.
 
+Note that the microphone bonus needs HTTPS, so it works on the live site but not over plain `http://` on a local network address.
+
 Progress lives in `localStorage` under `abigailEnglish_state`.
+
+## Deploying
+
+`git push` to `origin/main` — GitHub Pages rebuilds in about a minute.
+
+**Bump `CACHE_VERSION` in `sw.js` on every deploy that changes a file**, otherwise devices that already installed the app keep serving the old cached copy.
 
 ## Not built yet
 
 - Stage 3: sounding out CVC words, word families, build-a-word from letter tiles
 - Stage 4: sight words and short phrases
 - Stage 5: four-panel comic stories
-- PWA manifest + service worker, so it installs to her home screen
-- Deploy to GitHub Pages
+- Cross-device progress sync (today each device keeps its own)
