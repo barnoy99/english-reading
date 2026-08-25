@@ -62,7 +62,13 @@ const Engine = (function () {
       lastDay: null,
       newest: null,
       mic: true,
-      goal: 3        // activities per mission
+      goal: 3,       // activities per mission
+      /* Preferences and the outfit merge on the copy most recently CHANGED,
+         which `updatedAt` cannot tell us: that moves on every answer she
+         gives, so a device she had merely played on looked newer than the one
+         where the setting was actually changed. This moves only when a
+         preference or the outfit really changes. */
+      settingsAt: 0
     };
   }
 
@@ -546,9 +552,12 @@ const Engine = (function () {
     s.equipped = {};
     dressTheGaps();
     recomputeCoins();
+    touchSettings();
     save();
     return s.coinEpoch;
   }
+
+  function touchSettings() { s.settingsAt = Date.now(); }
 
   function equip(id) {
     const w = item(id);
@@ -558,6 +567,7 @@ const Engine = (function () {
     else s.equipped[w.slot] = id;
     // a dress and a separates outfit are two different looks, not one
     if ((w.slot === 'top' || w.slot === 'bottom') && s.equipped.dress) delete s.equipped.dress;
+    touchSettings();
     save();
     return true;
   }
@@ -629,14 +639,23 @@ const Engine = (function () {
       s.streak = Math.max(s.streak || 0, r.streak || 0);
     }
 
-    // preferences are the parent's, so the most recently changed one wins
-    if ((r.updatedAt || 0) > (s.updatedAt || 0)) {
+    /* Preferences are the parent's, so the copy most recently CHANGED wins —
+       not the copy most recently saved. `updatedAt` moves on every recorded
+       answer, so one question answered on this device before the pull landed
+       made it look newer than the device where the setting was really changed,
+       and the setting was silently thrown away. A device that has never had a
+       preference touched (0) has no opinion and accepts the other side;
+       `updatedAt` is the fallback for records written before this field. */
+    const theirSettings = r.settingsAt || r.updatedAt || 0;
+    const mySettings = s.settingsAt || 0;
+    if (theirSettings > mySettings) {
       if (r.mic !== undefined) s.mic = r.mic;
       if (r.goal !== undefined) s.goal = r.goal;
+      s.settingsAt = theirSettings;
     }
 
-    // what she is wearing is a preference, so the newer device decides
-    if (theirs === mine && (r.updatedAt || 0) > (s.updatedAt || 0) && r.equipped) {
+    // what she is wearing is a preference too, decided the same way
+    if (theirs === mine && theirSettings > mySettings && r.equipped) {
       Object.keys(r.equipped).forEach(slot => {
         const w = item(r.equipped[slot]);
         if (w && w.slot === slot && s.owned.indexOf(w.id) >= 0) s.equipped[slot] = w.id;
@@ -675,6 +694,7 @@ const Engine = (function () {
     if (k === 'stage') s.stage = Math.max(1, Math.min(2, v | 0));
     if (k === 'mic') s.mic = !!v;
     if (k === 'goal') s.goal = Math.max(1, Math.min(6, v | 0));
+    touchSettings();
     save();
   }
 

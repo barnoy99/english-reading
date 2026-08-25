@@ -90,7 +90,11 @@ Long-press the faint `·` in the top corner for 0.8s.
 
 localStorage stays the source of truth; Firebase is only a courier. On launch, and whenever she returns to the app, the remote copy is **merged** in — never assigned over the top — and written back. Writes are debounced, so a 15-answer mission costs one round trip. With no network, no config, or a blocked SDK, the app runs exactly as it did before and the parent panel says so.
 
-The merge cannot lose work. Per-item progress goes to whichever device practised that item more; letters and furniture are unioned; stage, mission count and lifetime coins take the maximum; the streak follows the later day; settings follow the more recently touched device.
+The merge cannot lose work. Per-item progress goes to whichever device practised that item more; letters and furniture are unioned; stage, mission count and lifetime coins take the maximum; the streak follows the later day; settings and the outfit follow the device where they were most recently **changed**.
+
+That last rule used to read "most recently saved", which is not the same thing and was quietly wrong: `updatedAt` moves on every answer she gives, so a device she had merely played on outranked the device where the setting was actually changed — one question answered before the sync landed was enough to throw away the parent's setting and the outfit she had just put on. Preferences now carry their own `settingsAt`, moved only by a real change; a device that has never had one touched has no opinion and accepts the other side.
+
+`node test-merge.js` runs the merge rules on two simulated devices. It is worth running after any change to `mergeState`, because every rule in there is about a second device and a mistake shows up as something quietly disappearing rather than as anything breaking.
 
 **Coins are derived, not stored.** A running balance cannot merge — spend on the phone and the tablet still believes the coins are there. The state keeps lifetime `earned` coins, which only ever grows, and the spendable balance is always `earned − (what the wardrobe cost)`. That makes every synced field safe to merge, and old saves migrate on load.
 
